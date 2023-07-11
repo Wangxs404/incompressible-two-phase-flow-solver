@@ -1,0 +1,26 @@
+function D2ResultDeal(property)
+% global
+switch property
+    case 'RB10'
+        run D2Post_RS10
+    case 'RB1000'
+        run D2Post_RS1000
+    case 'laplace'
+        run D2Post_Laplace
+    case 'Buoyancy'
+        run D2Post_Buoyancy
+    case 'MassLeaf'
+        run D2Post_MassLeaf
+    case 'ShearDrop'
+        run D2Post_ShearDrop
+    case 'LDC100'
+        run D2Post_LDC100
+    case 'LDC1000'
+        run D2Post_LDC1000
+    case 'LDC3200'
+        run D2Post_LDC3200    
+    case 'LDC5000'
+        run D2Post_LDC5000
+    case 'RT'
+        run D2Post_RT      
+end

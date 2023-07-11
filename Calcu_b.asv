@@ -1,0 +1,28 @@
+%=============================计算bu======================================
+function[bu]=D3Calcu_b(u,uL,mX,g,GradFunc,rho,rhoL,rhoLL,uf,vf,wf,ufL,vfL,wfL,psi,phi,p)
+global dv Swith_Force imin imax jmin jmax kmin kmax nx ny nz dt adv
+% 通过控制前5个变量的输入，统一计算XYZ三个方向b的子程序
+BuTime= dv*(2*rhoL.*u-0.5*rhoLL.*uL);    
+bu_time=reshape(BuTime(imin:imax,jmin:jmax,kmin:kmax),nx*ny*nz,1);
+
+BuAdv= -dt*dv*adv(uf,vf,wf,ufL,vfL,wfL,mX,mX);%离散层面-守恒形式 U▽·(ρU）
+bu_adv=reshape(BuAdv(imin:imax,jmin:jmax,kmin:kmax),nx*ny*nz,1);
+
+BuGradP= -dt*dv*GradFunc(p);
+bu_p=reshape(BuGradP(imin:imax,jmin:jmax,kmin:kmax),nx*ny*nz,1);
+
+BuForce= dt*dv*g*rho;
+bu_force=reshape(BuForce(imin:imax,jmin:jmax,kmin:kmax),nx*ny*nz,1);
+
+BuFs= dt*dv*psi.*GradFunc(phi);
+bu_Fs=reshape(BuFs(imin:imax,jmin:jmax,kmin:kmax),nx*ny*nz,1);
+
+switch Swith_Force
+    case 1
+        bu=bu_time + bu_force + bu_adv + bu_p + bu_Fs;
+    case 2
+        bu=bu_time + bu_force + bu_adv + bu_p ;  
+end
+
+end
+
