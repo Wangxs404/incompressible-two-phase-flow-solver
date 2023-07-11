@@ -1,0 +1,50 @@
+% 本子程序实现数据后处理
+% 方法是：在计算完成后，循环导入计算中保存的'DataNum.mat'文件，并进行相应的数据处理
+%         一、避免了在计算中，每一步循环都要进行数据处理 二、便于后期增删改
+%   说明：注意循环变量‘mat_Freq : mat_Freq : istep_max’
+%         新增定量比数据，可不进行矩阵大小预设
+clc
+clear
+load('Data_Initial.mat')
+
+for LoadFreq = mat_Freq : mat_Freq : istep_max
+    
+    filename=['Data' num2str(LoadFreq) '.mat']; %循环读取
+    load(filename)
+        
+switch initial_type           % 定量对比的数据处理
+    case 1   % 计算Rising Bubble时自动开启
+        phiV=(1+phi)/2  ;   LocaY=repmat(Coord_y(jmin:jmax)',1,nx)';
+        Deno=sum(sum(phi(imin:imax,jmin:jmax)));  %denominator
+        NumeV=sum(sum(v(imin:imax,jmin:jmax).*phi(imin:imax,jmin:jmax)));% Numerator V
+        NumeY=sum(sum(LocaY.*phi(imin:imax,jmin:jmax)));
+        Vc(istep/mat_Freq,1)=NumeV/Deno;%#ok<SAGROW>
+        Yc(istep/mat_Freq,1)=NumeY/Deno;%#ok<SAGROW>
+              
+    case 4   % 计算Rayleigh Taylor时自动开启
+        for j=jmin:jmax
+            if phi(imin,j)*phi(imin,j+1) < 0
+                RT_wall(istep/mat_Freq)=Coord_y(j);%#ok<SAGROW>
+            end
+            if phi(imin+nx/2,j)*phi(imin+nx/2,j+1) < 0
+                RT_midd(istep/mat_Freq)=Coord_y(j);%#ok<SAGROW>
+            end
+        end
+        
+    case 6   % 计算剪切单液滴变形
+           [col,row]=find(phi<0.55 & phi>0.45);%返回界面下标
+            Lcol=(col-3)/nx*Lx;Lrow=(row-3)/ny*Ly;%将下标还原为位置坐标
+            Length=zeros(size(Lcol));
+            n=0;
+            for j=1:size(Lcol)
+                n=n+1;
+                Length(n)=norm(   [1,1]   -     [Lcol(n),Lrow(n)]  );
+            end
+            Lmax=max(Length);Lmin=min(Length);
+            Deform(istep/mat_Freq)=(Lmax-Lmin)/(Lmax+Lmin);%#ok<SAGROW>
+end
+
+[MassLeaf]=MassTest(rho,phi,Mass_Initial,istep);  %质量泄露检查
+
+end
+ Time=linspace(0 , dt*istep_max , istep_max);

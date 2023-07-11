@@ -1,0 +1,119 @@
+%                               说    明
+%     本程序基于同位网格投影算法，采用有限体积法+相场模型求解不可压两相流
+clear ; close all ; warning off
+%========================= =====Global Variable============================
+global imax imin jmax jmin kmin kmax nx ny Coord_x Coord_y Coord_z dx dy dz dxi dyi dzi dt Lx Ly Swith_SM
+global Convection_Scheme refere_Pressure  velocity_BCtype Swith_Force rho_Heavy rho_Light
+global Dim initial_type dat_Freq Dynamic_Draw mat_Freq Res_Freq RhieChow_or_Not How_Many_Phase
+global Lz nz 
+%==================================划分网格&时间步================================gx gy
+Dim=1;
+Lx=1*Dim  ;  Ly=1*Dim;  Lz=1*Dim;
+nx=20;   ny=20;  nz=50;
+dt=5e-4;  istep_max=ceil(1/dt);  
+[imin,imax,jmin,jmax,kmin,kmax,Coord_x ,Coord_y ,Coord_z,dx,dy,dz,dxi,dyi,dzi] = D3Mesh(Lx,Ly,Lz);
+%===============================对流格式与界面选择=================
+How_Many_Phase=2;
+Convection_Scheme=1;                   %对流格式  1:WENO 2:Quick 3:Centre
+refere_Pressure=4;                     %压力零点  1/2/3/4/5，左下逆时针四对角-体心
+Swith_Force=1;                         %1:G+Fs ; 2: Only G
+velocity_BCtype=2;  %Check‘set_BC’   %1:NS slip EW Solid_NoSlip; 2:Solid Bc ; 3:NS slip EW Open_NoSlip ; 4:NS slip EW Period 5：All Period
+initial_type=1;     %See‘D3Initial_phi' %1.Bubble_Rising;2.Dam_Break;3.Zalesak's Disk;4.Rayleigh Taylor------
+Swith_SM=2;         %See‘Calcu_MccSu' %修正格式 1:Su  2:Mcc-Dh
+RhieChow_or_Not=11;  %See‘Eq_Mome_S2_RhieChow' %1.Centre;9. Full RhieChow-LJY;11. Full RhieChow-HZY
+property=3;         %See‘Property'    %材料参数 (详见‘Property’)
+run Property                           %===指定材料和界面参数（要求位于IniPhi之前）
+%================================
+Res_Freq=50  ;  dat_Freq=1000;  mat_Freq=1000; Dynamic_Draw='ON'; %===Debug设置===
+[phi,phiL]=D3Initial_phi(initial_type); %===相界面初始化=====
+istep=0;                                 %===为便于续算，需将初始istep置于“SpecialSet”前
+% run DimensionlessData                    %===指定无量纲量并输出，以及计算双HELM_Alpha
+run D3Def_Ini_Matrix                       %===初始化矩阵大小
+% run SpecialSet                           %===控制续算 计算初始质量以及各算例的个性化设置
+run D3Post_InitialPhi                      %===绘制初始界面、输出/保存初始数据
+% $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$  开始闭环运算  $$$$$$$$$$$$$$$$$$$$$$$$$$$
+% istep=0;
+Residual=zeros(istep_max,3);
+R_limit=100;  time_start=clock;A_timeStart=datestr(now,'HH:MM mmm.dd');
+while (istep < istep_max)
+    %================================设置边条==========================
+    [u,v,w,uf,vf,wf]=GivenFlow(nx,ny,nz);%给定速度场，检验CH方程
+    %==================================
+    [u,v,w] = D3set_BC(u,v,w);    [p]=D3set_BCNeu(p);   [phi]=D3set_BCNeu(phi); 
+    %================================计算相场方程得[phi(n+1)]================
+    phiLL=phiL;                                            %截留phiL，作为phiLL，用于动量方程的计算 
+    [phin,phiLn,psi,M_change] = D3Eq_PhaseHzy(uf,vf,wf,phi);
+    phi_R=mean(phin,'all')-mean(phi,'all');
+    phiL=phiLn; phi=phin;   %计算残差 ；赋值phi & phiL
+    [rho,rhoL,rhoLL,mu,phi,phiL,phiLL]=D3Updata_RhoMiu(phi,phiL,phiLL,rho_Light,rho_Heavy,mu_Light,mu_Heavy); %更新ρ、μ，同时约束φ[-1,1]
+    %%
+%     %=========================修正质量通量Mcc /修正质量源项 Sm
+%     [Mccx,Mccy,SUx,SUy]=Calcu_MccSu(rhoL,u,M_change,psi,v) ;
+%     
+%     %==============================计算动量方程得[U V]=========================
+%     [un,vn,uLn,vLn,pn,pL,ppien] = Eq_Mome(u,v,uL,vL,uf,vf,ufL,vfL,p,mu,rho,rhoL,rhoLL, Mccx, Mccy,psi,phi,phiL,SUx,SUy);
+%    [un,vn,wn,uLn,vLn,wLn,pn,pL,ppien] = Eq_Mome(u,v,w,uL,vL,wL,uf,vf,wf,ufL,vfL,wfL,p,mu,rho,rhoL,rhoLL,psi,phi,phiL);
+   [ u,v,w,uL,vL,wL,p,pL,ppie] = D3Eq_Mome(u,v,w,uL,vL,wL,uf,vf,wf,ufL,vfL,wfL,p,mu,rho,rhoL,rhoLL,psi,phi,phiL);  
+%     u_R = norm(un-u)/(nx*ny);    v_R=norm(vn-v)/(nx*ny);  p_R = norm(pn-p)/(nx*ny);
+%     u=un;   v=vn;  uL=uLn; vL=vLn;  p=pn;   ppie=ppien;
+%     [uf,vf,ufL,vfL]=Uf_inte(u,v,uL,vL);                   %调用插值函数计算Uf .二选一
+    u_R =mean(u,'all')-mean(u,'all');    v_R =mean(v,'all')-mean(v,'all');
+    
+    %==================================完成单次循环============================
+    %% 动态显示残差
+    istep=istep+1 ; Residual(istep,1)=u_R ;  Residual(istep,2)=v_R ; Residual(istep,3)=phi_R ;  %计算残差
+    if   mod(istep,Res_Freq) ==  0
+        fprintf(' 迭代次数  %s / %s\n  phi_R=   %s\n  u_R  =   %s\n  v_R  =   %s  \n\n',...
+            num2str(istep),num2str(istep_max),num2str(phi_R),num2str(u_R),num2str(v_R));
+    elseif (u_R>R_limit)||(v_R>R_limit)
+        fprintf('残差过大不收敛');
+        break;
+    end
+    %% Output and Draw
+% %=====输出数据到.dat======
+% if  mod(istep,dat_Freq) ==  0
+%     var1=phi(4:imax+1,4:jmax+1); %1.指定输出变量及范围
+%     var2=psi(4:imax+1,4:jmax+1);
+%     var3=u(4:imax+1,4:jmax+1);
+%     var4=v(4:imax+1,4:jmax+1);
+%     var5=p(4:imax+1,4:jmax+1);
+%     varName ='phi psi u v p\n';  % 2.指定输出变量显示名;注意同一.m文件中后面的varName会被前面的覆盖
+%     export2(istep,xx(:),yy(:),NGX,NGY,varName,var1(:),var2(:),var3(:),var4(:),var5(:))%3.输出变量
+% end
+%=====绘制动态图======
+switch Dynamic_Draw
+    case 'ON'
+        if     mod(istep,20) ==  0
+            figure(3)  %绘制三维等值面图
+            D3show(phi);
+            grid minor;
+            title('Moving phi face');
+            drawnow ;  %强切窗口
+%             clf
+
+%             figure(4)  %沿z方向切片，绘制等值线图
+%             D3slice(phi,[0.3,0.5,0.6])
+%             grid minor;
+%             title('Moving phi slice');
+%             drawnow
+        end
+end
+%=====保存数据到Workspace====
+if   mod(istep,mat_Freq) ==  0   %保存数据到Workspace
+    filename=strcat('Data', num2str(istep));
+    save (filename);
+end
+if   istep==100   
+    time_end100=clock;  runtime100=etime(time_end100,time_start)/60;
+    PredictTime=runtime100*istep_max/100;
+    fprintf(' PredictTime = %s \n',num2str(PredictTime));
+end
+
+end
+time_end=clock  ; A_timeEnd=datestr(now,'HH:MM mmm.dd');
+A_runtime_s=etime(time_end,time_start); A_runtime_min=etime(time_end,time_start)/60;
+save Data_Multy
+% run DataQuantify
+fprintf(' EndStep= %s \n ',num2str(istep));
+% fprintf('MassLeaf= %s %s\n',num2str(MassLeaf(end)*100),'%');
+% run Post_ShearDrop

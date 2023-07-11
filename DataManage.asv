@@ -1,0 +1,69 @@
+function DataManage(istep,istep_max,time_start,phi,psi,u,v,p,rho,Mass_Initial,xx,yy,NGX,NGY)
+global imax imin jmax jmin nx ny Coord_x Coord_y  Lx Ly  initial_type dat_Freq Dynamic_Draw mat_Freq
+
+%%    定量对比的数据处理
+switch initial_type
+    case 1   % 计算Rising Bubble时自动开启
+        phiV=(1+phi)/2  ;   LocaY=repmat(Coord_y(jmin:jmax)',1,nx)';
+        Deno=sum(sum(phi(imin:imax,jmin:jmax)));  %denominator
+        NumeV=sum(sum(v(imin:imax,jmin:jmax).*phi(imin:imax,jmin:jmax)));% Numerator V
+        NumeY=sum(sum(LocaY.*phi(imin:imax,jmin:jmax)));
+        Vc(istep)=NumeV/Deno;%#ok<SAGROW>
+        Yc(istep)=NumeY/Deno;%#ok<SAGROW>
+        
+        
+    case 4   % 计算Rayleigh Taylor时自动开启
+        for j=jmin:jmax
+            if phi(imin,j)*phi(imin,j+1) < 0
+                RT_wall(istep)=Coord_y(j);%#ok<SAGROW>
+            end
+            if phi(imin+nx/2,j)*phi(imin+nx/2,j+1) < 0
+                RT_midd(istep)=Coord_y(j);%#ok<SAGROW>
+            end
+        end
+        
+    case 6   % 计算Rising Bubble时自动开启
+        [col,row]=find(phi<0.55 & phi>0.45);%返回界面下标
+        Lcol=(col-3)/nx*Lx;Lrow=(row-3)/ny*Ly;%将下标还原为位置坐标
+        Length=zeros(size(Lcol));
+        n=0;
+        for i=1:size(Lcol)
+            n=n+1;
+            Length(n)=norm(   [1,1]   -     [Lcol(n),Lrow(n)]  );
+        end
+        Lmax=max(Length);Lmin=min(Length);
+        Deform(istep,)=(Lmax-Lmin)/(Lmax+Lmin);%#ok<SAGROW>
+end
+
+
+%% Output and Draw
+%=====输出数据到.dat======
+if  mod(istep,dat_Freq) ==  0
+    var1=phi(4:imax+1,4:jmax+1); %1.指定输出变量及范围
+    var2=psi(4:imax+1,4:jmax+1);
+    var3=u(4:imax+1,4:jmax+1);
+    var4=v(4:imax+1,4:jmax+1);
+    var5=p(4:imax+1,4:jmax+1);
+    varName ='phi psi u v p\n';  % 2.指定输出变量显示名;注意同一.m文件中后面的varName会被前面的覆盖
+    export2(istep,xx(:),yy(:),NGX,NGY,varName,var1(:),var2(:),var3(:),var4(:),var5(:))%3.输出变量
+end
+%=====绘制动态图======
+switch Dynamic_Draw
+    case 'ON'
+        if     mod(istep,20) ==  0
+            contourf(Coord_x(4:1+nx),Coord_y(4:1+ny),phi(4:1+nx,4:1+ny)',3) %等高线图
+            title('Moving phi');axis equal;
+            drawnow
+        end
+end
+%=====保存数据到Workspace====
+if   mod(istep,mat_Freq) ==  0   %保存数据到Workspace
+    filename=strcat('Data', num2str(istep));
+    save (filename);
+end
+if   istep==100   %保存数据到Workspace
+    time_end100=clock;  runtime100=etime(time_end100,time_start)/60;
+    PredictTime=runtime100*istep_max/100;
+    fprintf(' PredictTime = %s \n',num2str(PredictTime));
+end
+
